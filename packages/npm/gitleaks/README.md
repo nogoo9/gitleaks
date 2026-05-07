@@ -28,15 +28,15 @@ pnpm add @nogoo9/gitleaks
 After installation the `gitleaks` binary is available via `npx`:
 
 ```bash
-npx gitleaks detect --source .
-npx gitleaks protect --staged
+npx gitleaks git .
+npx gitleaks dir .
 npx gitleaks version
 ```
 
 Or run it directly if `node_modules/.bin` is on your `PATH`:
 
 ```bash
-gitleaks detect --source .
+gitleaks git .
 ```
 
 ### Node.js API
@@ -48,7 +48,7 @@ import { run, getBinaryPath } from '@nogoo9/gitleaks';
 const bin = getBinaryPath();
 
 // Run gitleaks programmatically
-const result = await run(['detect', '--source', '.', '--exit-code', '1']);
+const result = await run(['git', '.', '--exit-code', '1']);
 console.log(result.stdout);
 console.log('exit code:', result.exitCode);
 ```

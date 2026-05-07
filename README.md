@@ -45,7 +45,6 @@ Both packages expose a `gitleaks` command identical to the upstream binary:
 ```bash
 gitleaks detect --source .
 gitleaks detect --source . --report-format json --report-path findings.json
-gitleaks protect --staged
 gitleaks version
 ```
 
@@ -60,7 +59,7 @@ import { getBinaryPath } from '@nogoo9/gitleaks/src/index.js';
 // Or just run via the wrapper directly in scripts:
 const result = spawnSync(
   process.execPath,
-  [require.resolve('@nogoo9/gitleaks'), 'detect', '--source', '.'],
+  [require.resolve('@nogoo9/gitleaks'), 'git', '.', '--exit-code', '1'],
   { stdio: 'inherit' }
 );
 ```
@@ -70,13 +69,13 @@ const result = spawnSync(
 ```python
 import nogoo9_gitleaks as gitleaks
 
-# Run detect, inherit stdio (same as CLI)
-result = gitleaks.run(["detect", "--source", "."])
+# Run detect on current git repo, inherit stdio (same as CLI)
+result = gitleaks.run(["git", "."])
 print("Exit code:", result.returncode)
 
 # Capture JSON output for parsing
 result = gitleaks.run(
-    ["detect", "--source", ".", "--report-format", "json", "--exit-code", "0"],
+    ["git", ".", "--report-format", "json", "--exit-code", "0"],
     capture_output=True,
     text=True,
 )
@@ -88,9 +87,6 @@ for f in findings:
 # Get the binary path directly (e.g. for subprocess integration)
 binary = gitleaks.get_binary_path()
 print("Binary at:", binary)
-
-# Pin a specific gitleaks version
-binary = gitleaks.get_binary_path(version="8.28.0")
 ```
 
 ---

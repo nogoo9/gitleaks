@@ -26,8 +26,8 @@ pipx install nogoo9-gitleaks
 ### CLI
 
 ```bash
-gitleaks detect --source .
-gitleaks protect --staged
+gitleaks git .
+gitleaks dir .
 gitleaks version
 ```
 
@@ -39,8 +39,8 @@ import nogoo9_gitleaks as gitleaks
 # Get the path to the gitleaks binary
 bin_path = gitleaks.get_binary_path()
 
-# Run gitleaks programmatically
-result = gitleaks.run(['detect', '--source', '.', '--exit-code', '1'])
+# Scan a git repository
+result = gitleaks.run(['git', '.', '--exit-code', '1'])
 print(result.stdout)
 print('exit code:', result.returncode)
 ```

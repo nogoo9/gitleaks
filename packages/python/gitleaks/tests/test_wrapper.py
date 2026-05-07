@@ -91,8 +91,10 @@ def test_run_help_exits_zero():
 def test_run_help_lists_subcommands():
     result = gitleaks.run(['--help'], capture_output=True, text=True)
     output = result.stdout + result.stderr
-    for subcommand in ('detect', 'protect', 'version'):
+    # gitleaks v8.20+ renamed detect→git, removed protect; dir added for filesystem scans
+    for subcommand in ('git', 'dir', 'version'):
         assert subcommand in output.lower(), f"'{subcommand}' not found in --help output"
+
 
 
 def test_run_unknown_command_exits_nonzero():
