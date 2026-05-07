@@ -39,9 +39,9 @@ test('wrapper: gitleaks --help exits 0 and lists subcommands', () => {
   const result = runWrapper('--help');
   expect(result.status).toBe(0);
   const output = result.stdout ?? '';
-  // Verify core subcommands are present in help output
-  expect(output).toMatch(/detect/i);
-  expect(output).toMatch(/protect/i);
+  // gitleaks v8.20+ renamed detect→git, removed protect; dir added for filesystem scans
+  expect(output).toMatch(/\bgit\b/i);
+  expect(output).toMatch(/\bdir\b/i);
   expect(output).toMatch(/version/i);
 });
 
