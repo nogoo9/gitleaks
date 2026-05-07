@@ -1,0 +1,43 @@
+{
+  "name": "@nogoo9/gitleaks",
+  "version": "8.30.1-post.2",
+  "description": "npm wrapper for gitleaks \u2014 find secrets in git repos",
+  "keywords": [
+    "gitleaks",
+    "secrets",
+    "security",
+    "git",
+    "leak",
+    "detection"
+  ],
+  "homepage": "https://github.com/nogoo9/gitleaks",
+  "bugs": "https://github.com/nogoo9/gitleaks/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nogoo9/gitleaks.git"
+  },
+  "license": "MIT",
+  "author": "nogoo9",
+  "main": "src/index.js",
+  "bin": {
+    "gitleaks": "src/index.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@nogoo9/gitleaks-darwin-arm64": "8.30.1-post.2",
+    "@nogoo9/gitleaks-darwin-x64": "8.30.1-post.2",
+    "@nogoo9/gitleaks-linux-arm64": "8.30.1-post.2",
+    "@nogoo9/gitleaks-linux-arm": "8.30.1-post.2",
+    "@nogoo9/gitleaks-linux-x64": "8.30.1-post.2",
+    "@nogoo9/gitleaks-linux-x32": "8.30.1-post.2",
+    "@nogoo9/gitleaks-windows-arm64": "8.30.1-post.2",
+    "@nogoo9/gitleaks-windows-x64": "8.30.1-post.2",
+    "@nogoo9/gitleaks-windows-x32": "8.30.1-post.2"
+  }
+}

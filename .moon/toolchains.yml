@@ -1,0 +1,13 @@
+$schema: 'https://moonrepo.dev/schemas/toolchain.json'
+
+node:
+  version: '24.15.0'
+  packageManager: 'bun'
+  bun:
+    version: '1.3.13'
+
+unstable_python:
+  version: '3.12.13'
+  packageManager: 'uv'
+  uv:
+    version: '0.11.11'

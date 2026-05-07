@@ -1,0 +1,33 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+# Root-level moon project — defines workspace-wide tasks
+id: 'root'
+
+tasks:
+  bootstrap-npm:
+    description: 'One-time: download binaries and publish all npm packages with an NPM_TOKEN (run before setting up OIDC Trusted Publishing)'
+    command: 'bash scripts/bootstrap-npm.sh'
+    options:
+      runInCI: false   # Never run in CI pipelines
+    inputs:
+      - 'scripts/bootstrap-npm.sh'
+      - 'scripts/build-npm-pkgs.mjs'
+      - '.gitleaks-version'
+      - 'packages/npm/*/package.json'
+
+  sync-version:
+    description: 'Check upstream gitleaks for a new release and bump all package versions'
+    command: 'bun scripts/sync-version.mjs'
+    inputs:
+      - 'scripts/sync-version.mjs'
+      - '.gitleaks-version'
+
+  build-npm:
+    description: 'Download and verify gitleaks binaries into all platform npm package bin/ dirs'
+    command: 'bun scripts/build-npm-pkgs.mjs'
+    inputs:
+      - 'scripts/build-npm-pkgs.mjs'
+      - '.gitleaks-version'
+    outputs:
+      - 'packages/npm/gitleaks-*/bin/gitleaks'
+      - 'packages/npm/gitleaks-*/bin/gitleaks.exe'

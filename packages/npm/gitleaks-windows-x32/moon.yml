@@ -1,0 +1,10 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'javascript'
+
+tasks:
+  publish:
+    command: 'npm publish --provenance --access public --tag latest'
+    inputs:
+      - 'package.json'
+      - 'bin/gitleaks.exe'

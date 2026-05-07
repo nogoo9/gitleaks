@@ -1,0 +1,122 @@
+name: Check Upstream Gitleaks Release
+
+on:
+  schedule:
+    # Daily at 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force PR creation even if version unchanged'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    name: Check & Open Release PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.13'
+
+      - name: Fetch latest gitleaks version
+        id: upstream
+        run: |
+          RESPONSE=$(curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/gitleaks/gitleaks/releases/latest)
+          VERSION=$(echo "$RESPONSE" | bun -e "
+            process.stdin.setEncoding('utf8');
+            let d='';
+            process.stdin.on('data',c=>d+=c);
+            process.stdin.on('end',()=>process.stdout.write(JSON.parse(d).tag_name.replace(/^v/,'')));
+          ")
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Read current pinned version
+        id: current
+        run: |
+          echo "version=$(cat .gitleaks-version | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+
+      - name: Check if PR branch already exists
+        id: branch_check
+        run: |
+          BRANCH="release/v${{ steps.upstream.outputs.version }}"
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Decide whether to sync
+        id: should_sync
+        run: |
+          NEW="${{ steps.upstream.outputs.version }}"
+          CUR="${{ steps.current.outputs.version }}"
+          BRANCH_EXISTS="${{ steps.branch_check.outputs.exists }}"
+          FORCE="${{ inputs.force }}"
+          if [ "$NEW" != "$CUR" ] || [ "$FORCE" == "true" ]; then
+            if [ "$BRANCH_EXISTS" == "true" ] && [ "$FORCE" != "true" ]; then
+              echo "sync=false" >> $GITHUB_OUTPUT
+              echo "PR branch already exists for v${NEW}, skipping."
+            else
+              echo "sync=true" >> $GITHUB_OUTPUT
+              echo "Sync needed: ${CUR} → ${NEW}"
+            fi
+          else
+            echo "sync=false" >> $GITHUB_OUTPUT
+            echo "Already up to date at ${CUR}"
+          fi
+
+      - name: Run version & changelog sync
+        if: steps.should_sync.outputs.sync == 'true'
+        run: bun scripts/sync-version.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release branch and open PR
+        if: steps.should_sync.outputs.sync == 'true'
+        run: |
+          NEW_VERSION="${{ steps.upstream.outputs.version }}"
+          BRANCH="release/v${NEW_VERSION}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "chore: bump gitleaks to v${NEW_VERSION}"
+          git push origin "$BRANCH"
+
+          # Extract the new CHANGELOG entry for the PR body
+          CHANGELOG_BODY=$(awk "/^## \[${NEW_VERSION}\]/,/^## \[/" CHANGELOG.md \
+            | head -n -1 | tail -n +2)
+
+          gh pr create \
+            --title "chore: bump gitleaks to v${NEW_VERSION}" \
+            --body "## Upstream release: gitleaks v${NEW_VERSION}
+
+          Automated PR tracking the upstream [gitleaks v${NEW_VERSION}](https://github.com/gitleaks/gitleaks/releases/tag/v${NEW_VERSION}) release.
+
+          ### Changelog
+
+          ${CHANGELOG_BODY}
+
+          ---
+          *Merging this PR will create a GitHub release and trigger publishing to npm and PyPI.*" \
+            --base main \
+            --head "$BRANCH" \
+            --label "automated,release"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,25 @@
+{
+  "name": "@nogoo9/gitleaks-windows-arm64",
+  "version": "8.30.1-post.2",
+  "description": "gitleaks binary for windows-arm64",
+  "keywords": [
+    "gitleaks"
+  ],
+  "homepage": "https://github.com/nogoo9/gitleaks",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nogoo9/gitleaks.git"
+  },
+  "license": "MIT",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "preferUnplugged": true,
+  "files": [
+    "bin/gitleaks.exe",
+    "README.md"
+  ]
+}

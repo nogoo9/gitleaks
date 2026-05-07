@@ -1,0 +1,8 @@
+# Built artifacts
+dist/
+*.egg-info/
+__pycache__/
+
+# Bundled binary — downloaded/placed at build time, never committed
+src/nogoo9_gitleaks/bin/gitleaks
+src/nogoo9_gitleaks/bin/gitleaks.exe

@@ -1,0 +1,25 @@
+{
+  "name": "@nogoo9/gitleaks-windows-x32",
+  "version": "8.30.1-post.2",
+  "description": "gitleaks binary for windows-x32",
+  "keywords": [
+    "gitleaks"
+  ],
+  "homepage": "https://github.com/nogoo9/gitleaks",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nogoo9/gitleaks.git"
+  },
+  "license": "MIT",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "ia32"
+  ],
+  "preferUnplugged": true,
+  "files": [
+    "bin/gitleaks.exe",
+    "README.md"
+  ]
+}

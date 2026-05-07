@@ -1,0 +1,74 @@
+name: Release
+
+# Triggers when a release/v* PR is merged into main
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: write   # Required for gh workflow run (triggers publish.yml)
+
+jobs:
+  release:
+    name: Tag & Create GitHub Release
+    # Only run when a release/v* branch was actually merged (not just closed)
+    if: github.event.pull_request.merged == true && startsWith(github.head_ref, 'release/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Use default GITHUB_TOKEN — tag push here will NOT auto-trigger
+          # publish.yml because same-token pushes don't fire workflow events.
+          # We trigger publish explicitly via workflow_dispatch below.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Read release version
+        id: version
+        run: |
+          echo "value=$(cat .gitleaks-version | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+
+      - name: Extract CHANGELOG entry
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          # Extract content between this version's heading and the next
+          BODY=$(awk "/^## \[${VERSION}\]/,/^## \[/" CHANGELOG.md \
+            | head -n -1)
+          # Use heredoc to safely pass multiline to GITHUB_OUTPUT
+          {
+            echo 'body<<CHANGELOG_EOF'
+            echo "$BODY"
+            echo 'CHANGELOG_EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Create & push tag
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${VERSION}" -m "gitleaks v${VERSION}"
+          git push origin "v${VERSION}"
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.value }}
+          name: v${{ steps.version.outputs.value }}
+          body: ${{ steps.changelog.outputs.body }}
+          draft: false
+          prerelease: false
+
+      - name: Trigger publish workflow
+        run: |
+          gh workflow run publish.yml \
+            --ref main \
+            --field version=${{ steps.version.outputs.value }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

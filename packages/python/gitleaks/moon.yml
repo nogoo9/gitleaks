@@ -1,0 +1,61 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+id: 'gitleaks-python'
+language: 'python'
+
+# Moon 2.x: tasks run via uv because unstable_python.packageManager = 'uv' in toolchains.yml
+# Moon automatically activates the venv and prepends its bin to PATH.
+
+tasks:
+  install:
+    command: 'uv sync --group dev'
+    inputs:
+      - 'pyproject.toml'
+      - 'uv.lock'
+
+  lint:
+    command: 'uv run ruff check src/ tests/'
+    deps:
+      - 'install'
+    inputs:
+      - 'src/**/*.py'
+      - 'tests/**/*.py'
+      - 'pyproject.toml'
+
+  format:
+    command: 'uv run ruff format src/ tests/'
+    deps:
+      - 'install'
+    inputs:
+      - 'src/**/*.py'
+      - 'tests/**/*.py'
+
+  test:
+    command: 'uv run pytest tests/ -v'
+    deps:
+      - 'install'
+    inputs:
+      - 'src/**/*.py'
+      - 'tests/**/*.py'
+      - '/.gitleaks-version'
+
+  build:
+    command: 'uv build'
+    deps:
+      - 'install'
+    inputs:
+      - 'src/**/*.py'
+      - 'pyproject.toml'
+    outputs:
+      - 'dist/'
+
+  # Note: publish is done via pypa/gh-action-pypi-publish in publish.yml (OIDC).
+  # This task is only for manual/local use with a token.
+  publish:
+    command: 'uv publish'
+    options:
+      runInCI: false
+    deps:
+      - 'build'
+    inputs:
+      - 'dist/**/*'

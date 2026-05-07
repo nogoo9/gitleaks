@@ -1,0 +1,23 @@
+$schema: 'https://moonrepo.dev/schemas/project.json'
+
+language: 'javascript'
+
+tasks:
+  test:
+    command: 'bun test tests/'
+    inputs:
+      - 'src/**/*'
+      - 'tests/**/*'
+      - '/.gitleaks-version'
+
+  lint:
+    # node --check validates syntax without executing (available since Node 9)
+    command: 'node --check src/index.js'
+    inputs:
+      - 'src/**/*'
+
+  publish:
+    command: 'npm publish --provenance --access public --tag latest'
+    inputs:
+      - 'src/**/*'
+      - 'package.json'

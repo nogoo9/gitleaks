@@ -1,0 +1,273 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (without v prefix, e.g. 8.30.1)"
+        required: true
+
+jobs:
+  # ─── npm ────────────────────────────────────────────────────────────────────
+  publish-npm:
+    name: Publish npm packages
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # Required for OIDC provenance
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Set up Node (for npm publish + OIDC)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "value=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "value=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download & verify binaries
+        run: bun scripts/build-npm-pkgs.mjs ${{ steps.version.outputs.value }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install workspace deps
+        run: bun install
+
+      # Publish platform packages first (main package depends on them)
+      - name: Publish platform packages
+        run: |
+          PLATFORMS=(
+            darwin-arm64 darwin-x64
+            linux-arm64 linux-arm linux-x64 linux-x32
+            windows-arm64 windows-x64 windows-x32
+          )
+          for p in "${PLATFORMS[@]}"; do
+            PKG_DIR="packages/npm/gitleaks-${p}"
+
+            # Preflight: binary must exist
+            if [[ "$p" == windows-* ]]; then
+              BINARY="${PKG_DIR}/bin/gitleaks.exe"
+            else
+              BINARY="${PKG_DIR}/bin/gitleaks"
+            fi
+            if [ ! -f "$BINARY" ]; then
+              echo "ERROR: binary missing: $BINARY" >&2; exit 1
+            fi
+            if [ ! -f "${PKG_DIR}/README.md" ]; then
+              echo "ERROR: README.md missing for ${p}" >&2; exit 1
+            fi
+            echo "✓ preflight ok: ${p} ($(du -sh "$BINARY" | cut -f1) binary)"
+
+            echo "Publishing @nogoo9/gitleaks-${p}..."
+            cd "${PKG_DIR}"
+            npm publish --provenance --access public --tag latest
+            cd -
+          done
+        env:
+          # npm does not support passwordless OIDC auth (unlike PyPI).
+          # NPM_TOKEN is always required. --provenance uses the OIDC id-token
+          # only to attach a signed provenance attestation, not for auth.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @nogoo9/gitleaks (main)
+        run: |
+          cd packages/npm/gitleaks
+          npm publish --provenance --access public --tag latest
+
+  # ─── PyPI: Build platform-specific wheels ──────────────────────────────────
+  build-pypi-wheels:
+    name: Build PyPI wheel (${{ matrix.platform_tag || 'any' }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Platform-specific wheels that bundle the gitleaks binary
+          - platform_tag: manylinux_2_17_x86_64.manylinux2014_x86_64
+            gitleaks_suffix: linux_x64
+            ext: .tar.gz
+            binary_name: gitleaks
+          - platform_tag: manylinux_2_17_aarch64.manylinux2014_aarch64
+            gitleaks_suffix: linux_arm64
+            ext: .tar.gz
+            binary_name: gitleaks
+          - platform_tag: macosx_11_0_arm64
+            gitleaks_suffix: darwin_arm64
+            ext: .tar.gz
+            binary_name: gitleaks
+          - platform_tag: macosx_10_9_x86_64
+            gitleaks_suffix: darwin_x64
+            ext: .tar.gz
+            binary_name: gitleaks
+          - platform_tag: win_amd64
+            gitleaks_suffix: windows_x64
+            ext: .zip
+            binary_name: gitleaks.exe
+          # Fallback wheel (no binary — downloads on first use)
+          - platform_tag: ""
+            gitleaks_suffix: ""
+            ext: ""
+            binary_name: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.11"
+          python-version: "3.12.13"
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "value=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "value=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download gitleaks binary
+        if: matrix.gitleaks_suffix != ''
+        working-directory: packages/python/gitleaks
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          SUFFIX="${{ matrix.gitleaks_suffix }}"
+          EXT="${{ matrix.ext }}"
+          BINARY="${{ matrix.binary_name }}"
+          ARCHIVE="gitleaks_${VERSION}_${SUFFIX}${EXT}"
+          BASE_URL="https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}"
+
+          mkdir -p src/nogoo9_gitleaks/bin
+
+          # Download checksums
+          curl -fsSL "${BASE_URL}/gitleaks_${VERSION}_checksums.txt" -o checksums.txt
+
+          # Download archive
+          echo "Downloading ${BASE_URL}/${ARCHIVE}"
+          curl -fsSL "${BASE_URL}/${ARCHIVE}" -o "${ARCHIVE}"
+
+          # Verify SHA-256
+          EXPECTED=$(grep "${ARCHIVE}" checksums.txt | awk '{print $1}')
+          ACTUAL=$(sha256sum "${ARCHIVE}" | awk '{print $1}')
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "ERROR: SHA-256 mismatch for ${ARCHIVE}" >&2
+            echo "  expected: $EXPECTED" >&2
+            echo "  actual:   $ACTUAL" >&2
+            exit 1
+          fi
+          echo "✓ SHA-256 verified: ${ARCHIVE}"
+
+          # Extract binary
+          if [ "$EXT" = ".tar.gz" ]; then
+            tar -xzf "${ARCHIVE}" -C src/nogoo9_gitleaks/bin/ "${BINARY}"
+          else
+            unzip -o -j "${ARCHIVE}" "${BINARY}" -d src/nogoo9_gitleaks/bin/
+          fi
+
+          # Verify binary exists
+          ls -la "src/nogoo9_gitleaks/bin/${BINARY}"
+          echo "✓ Binary placed: src/nogoo9_gitleaks/bin/${BINARY}"
+
+          # Cleanup
+          rm -f "${ARCHIVE}" checksums.txt
+
+      - name: Build wheel
+        working-directory: packages/python/gitleaks
+        run: uv build --wheel
+        env:
+          WHEEL_PLATFORM_TAG: ${{ matrix.platform_tag }}
+
+      - name: Build sdist (fallback wheel only)
+        if: matrix.platform_tag == ''
+        working-directory: packages/python/gitleaks
+        run: uv build --sdist
+
+      - name: Preflight — verify wheel
+        working-directory: packages/python/gitleaks
+        run: |
+          WHL=$(ls dist/*.whl | head -1)
+          echo "Built: $WHL ($(du -sh "$WHL" | cut -f1))"
+
+          python3 -c "
+          import zipfile, sys
+          whl = '$WHL'
+          zf = zipfile.ZipFile(whl)
+          names = zf.namelist()
+          py_files = [n for n in names if n.endswith('.py')]
+          binary_files = [n for n in names if 'bin/gitleaks' in n]
+          metadata = next((n for n in names if n.endswith('METADATA')), None)
+
+          if not py_files:
+              print('ERROR: no .py files in wheel', file=sys.stderr); sys.exit(1)
+          if not metadata:
+              print('ERROR: no METADATA in wheel', file=sys.stderr); sys.exit(1)
+
+          meta_content = zf.read(metadata).decode()
+          if 'Description-Content-Type' not in meta_content:
+              print('ERROR: README not embedded in METADATA', file=sys.stderr); sys.exit(1)
+
+          tag = '${{ matrix.platform_tag }}'
+          if tag:
+              if not binary_files:
+                  print('ERROR: platform wheel missing bundled binary', file=sys.stderr); sys.exit(1)
+              print(f'✓ platform wheel OK — .py: {len(py_files)}, binary: {binary_files[0]}')
+          else:
+              if binary_files:
+                  print('WARNING: fallback wheel should not contain binary', file=sys.stderr)
+              print(f'✓ fallback wheel OK — .py: {len(py_files)}, no binary (download on first use)')
+          "
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pypi-dist-${{ matrix.platform_tag || 'any' }}
+          path: packages/python/gitleaks/dist/*
+
+  # ─── PyPI: Publish all wheels ────────────────────────────────────────────────
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build-pypi-wheels
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write # Required for OIDC Trusted Publishing
+
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pypi-dist-*
+          path: dist/
+          merge-multiple: true
+
+      - name: List distributions
+        run: ls -la dist/
+
+      - name: Publish to PyPI
+        # OIDC Trusted Publishing — no token needed.
+        # Configure a pending publisher on https://pypi.org/manage/account/publishing/
+        # pointing to: repo=nogoo9/gitleaks, workflow=publish.yml, env=pypi
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
