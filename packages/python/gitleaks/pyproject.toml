@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nogoo9-gitleaks"
-version = "8.30.1"
+version = "8.30.1-post.3"
 description = "Python wrapper for gitleaks — find secrets in git repos"
 readme = "README.md"
 license = { text = "MIT" }

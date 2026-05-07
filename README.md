@@ -43,8 +43,8 @@ Platform-specific wheels bundle the correct `gitleaks` binary — no internet ac
 Both packages expose a `gitleaks` command identical to the upstream binary:
 
 ```bash
-gitleaks detect --source .
-gitleaks detect --source . --report-format json --report-path findings.json
+gitleaks git .
+gitleaks git . --report-format json --report-path findings.json
 gitleaks version
 ```
 

@@ -1,6 +1,6 @@
 {
   "name": "@nogoo9/gitleaks-windows-x64",
-  "version": "8.30.1-post.2",
+  "version": "8.30.1-post.3",
   "description": "gitleaks binary for windows-x64",
   "keywords": [
     "gitleaks"
