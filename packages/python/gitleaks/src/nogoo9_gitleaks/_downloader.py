@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import os
 import platform
+import re
 import stat
 import sys
 import tarfile
@@ -19,6 +20,7 @@ import urllib.request
 import zipfile
 from importlib import resources as importlib_resources
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 # Keep in sync with pyproject.toml version (updated by scripts/sync-version.mjs)
 _GITLEAKS_VERSION = "8.30.1"
@@ -88,16 +90,37 @@ def _cache_dir(version: str) -> Path:
     return base / version
 
 
+def _build_validated_url(base_url: str, version: str, filename: str) -> str:
+    try:
+        # Minimal path validation
+        if "/../" in base_url or re.search(r"/%2e%2e/", base_url, re.IGNORECASE):
+            raise ValueError("Invalid path")
+        
+        parsed = urlparse(base_url)
+        
+        # Validate path parameters
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", version):
+            raise ValueError("Invalid parameter")
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", filename):
+            raise ValueError("Invalid parameter")
+        
+        # Rebuild path from fixed literals + validated segments
+        parsed = parsed._replace(path=f"/gitleaks/gitleaks/releases/download/v{version}/{filename}")
+        
+        return urlunparse(parsed)
+    except Exception:
+        raise ValueError("Invalid URL")
+
+
 def _download_and_verify(version: str, suffix: str, ext: str, dest_dir: Path) -> Path:
     """Download the gitleaks archive + checksum, verify, extract, return binary path."""
     archive_name = f"gitleaks_{version}_{suffix}{ext}"
     checksums_name = f"gitleaks_{version}_{_CHECKSUMS_FILENAME}"
-    base_url = f"{_GITHUB_BASE}/v{version}"
 
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     # Download checksums file
-    checksums_url = f"{base_url}/{checksums_name}"
+    checksums_url = _build_validated_url(_GITHUB_BASE, version, checksums_name)
     print(f"[nogoo9-gitleaks] Downloading checksums from {checksums_url}", file=sys.stderr)
     with urllib.request.urlopen(checksums_url) as resp:  # noqa: S310
         checksums_text = resp.read().decode()
@@ -114,7 +137,7 @@ def _download_and_verify(version: str, suffix: str, ext: str, dest_dir: Path) ->
         raise RuntimeError(f"Could not find checksum for {archive_name}")
 
     # Download archive to a temp file, then verify
-    archive_url = f"{base_url}/{archive_name}"
+    archive_url = _build_validated_url(_GITHUB_BASE, version, archive_name)
     print(f"[nogoo9-gitleaks] Downloading {archive_url}", file=sys.stderr)
     with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
         tmp_path = Path(tmp.name)
