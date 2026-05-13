@@ -62,11 +62,12 @@ jobs:
 
       - name: Decide whether to sync
         id: should_sync
+        env:
+          FORCE: ${{ inputs.force }}
         run: |
           NEW="${{ steps.upstream.outputs.version }}"
           CUR="${{ steps.current.outputs.version }}"
           BRANCH_EXISTS="${{ steps.branch_check.outputs.exists }}"
-          FORCE="${{ inputs.force }}"
           if [ "$NEW" != "$CUR" ] || [ "$FORCE" == "true" ]; then
             if [ "$BRANCH_EXISTS" == "true" ] && [ "$FORCE" != "true" ]; then
               echo "sync=false" >> $GITHUB_OUTPUT
