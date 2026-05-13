@@ -35,7 +35,36 @@ const PLATFORMS = [
 ];
 
 const version = process.argv[2] || readFileSync(join(ROOT, '.gitleaks-version'), 'utf8').trim();
-const BASE_URL = `https://github.com/gitleaks/gitleaks/releases/download/v${version}`;
+
+function buildValidatedUrl(baseUrl, version, filename) {
+  try {
+    // Minimal path validation
+    if (baseUrl.includes('/../') || /\/%2e%2e\//i.test(baseUrl)) {
+      throw new Error('Invalid path');
+    }
+    
+    const url = new URL(baseUrl);
+    
+    // Validate path parameters
+    if (!/^[A-Za-z0-9_.-]+$/.test(version)) {
+      throw new Error('Invalid parameter');
+    }
+    if (filename && !/^[A-Za-z0-9_.-]+$/.test(filename)) {
+      throw new Error('Invalid parameter');
+    }
+    
+    // Rebuild pathname from fixed literals + validated segments
+    if (filename) {
+      url.pathname = `/gitleaks/gitleaks/releases/download/v${version}/${filename}`;
+    } else {
+      url.pathname = `/gitleaks/gitleaks/releases/download/v${version}`;
+    }
+    
+    return url.href;
+  } catch {
+    throw new Error('Invalid URL');
+  }
+}
 
 async function fetchText(url) {
   const res = await fetch(url);
@@ -50,7 +79,7 @@ async function fetchBuffer(url) {
 }
 
 async function parseChecksums(version) {
-  const url = `${BASE_URL}/gitleaks_${version}_checksums.txt`;
+  const url = buildValidatedUrl('https://github.com', version, `gitleaks_${version}_checksums.txt`);
   console.log(`Fetching checksums from ${url}`);
   const text = await fetchText(url);
   const map = {};
@@ -119,7 +148,7 @@ for (const [npmSuffix, assetSuffix, ext, binaryName] of PLATFORMS) {
   const expectedHash = checksums[archiveName];
   if (!expectedHash) throw new Error(`No checksum found for ${archiveName}`);
 
-  const url = `${BASE_URL}/${archiveName}`;
+  const url = buildValidatedUrl('https://github.com', version, archiveName);
   console.log(`  Downloading ${url}`);
   const buffer = await fetchBuffer(url);
 
